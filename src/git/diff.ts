@@ -3,6 +3,16 @@ import fs from "fs/promises";
 
 const git = simpleGit();
 
+export async function getRecentCommits(count:number = 10):Promise<string>{
+  try {
+    const log = await git.log({maxCount : count});
+
+    return log.all.map(commit => commit.message).join("\n");
+  } catch (error:any) {
+    return "";
+  }
+}
+
 export async function getGitDiff() {
   const unstaged = await git.diff();
 

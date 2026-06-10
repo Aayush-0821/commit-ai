@@ -3,8 +3,11 @@ import chalk from "chalk";
 import { analyzeRepository } from "../core/statusAnalyzer.js";
 import path from "path";
 import { calculateReadiness } from "../core/readiness.js";
-import { getGitDiff } from "../git/diff.js";
+import { getGitDiff, getRecentCommits } from "../git/diff.js";
 import { analyzeDiff } from "../core/diffAnalyzer.js";
+import { generateAICommitMessage } from "../ai/commitAI.js";
+import { generateCommitMessage } from "../core/commitGenerator.js";
+import ora from "ora";
 
 function formatFilePath(fullPath: string): string {
   const fileName = path.basename(fullPath);
@@ -154,10 +157,10 @@ Run ${chalk.bold.white("git init")} inside your project root to initialize one.
         const analysis = analyzeDiff(diffData.combined);
 
         console.log(
-         chalk.cyan.bold( `
+          chalk.cyan.bold(`
     Commit-AI Diff Analysis
-    `
-        ));
+    `),
+        );
         console.log(chalk.dim("─".repeat(40)));
 
         const adds = chalk.green(`+${analysis.additions}`);
@@ -166,42 +169,115 @@ Run ${chalk.bold.white("git init")} inside your project root to initialize one.
 
         let impactColor = chalk.green;
 
-        if(analysis.impact === "MEDIUM") impactColor = chalk.yellow;
-        if(analysis.impact === "HIGH") impactColor = chalk.red.bold;
+        if (analysis.impact === "MEDIUM") impactColor = chalk.yellow;
+        if (analysis.impact === "HIGH") impactColor = chalk.red.bold;
 
-        console.log(`${chalk.bold.white("Impact : ")} ${impactColor(analysis.impact)}`);
-        console.log(`${chalk.bold.white("Changes : ")} ${adds} additions ${chalk.dim("|")} ${dels} deletions`);
-        console.log(`${chalk.magenta("Summary : ")} ${chalk.white(analysis.summary)}\n`);
+        console.log(
+          `${chalk.bold.white("Impact : ")} ${impactColor(analysis.impact)}`,
+        );
+        console.log(
+          `${chalk.bold.white("Changes : ")} ${adds} additions ${chalk.dim("|")} ${dels} deletions`,
+        );
+        console.log(
+          `${chalk.magenta("Summary : ")} ${chalk.white(analysis.summary)}\n`,
+        );
 
         console.log(chalk.white.bold("Files Changed : "));
 
-        if(analysis.files.length === 0){
-            console.log(chalk.dim("  No Files Changed."));
-        }
-        else{
-            const MAX_FILES_TO_SHOW = 15;
-            const filesToShow = analysis.files.slice(0,MAX_FILES_TO_SHOW);
+        if (analysis.files.length === 0) {
+          console.log(chalk.dim("  No Files Changed."));
+        } else {
+          const MAX_FILES_TO_SHOW = 15;
+          const filesToShow = analysis.files.slice(0, MAX_FILES_TO_SHOW);
 
-            filesToShow.forEach((file)=>{
-                console.log(`   ${chalk.blue("•")} ${formatFilePath(file)}`);
-            });
+          filesToShow.forEach((file) => {
+            console.log(`   ${chalk.blue("•")} ${formatFilePath(file)}`);
+          });
 
-            if(analysis.files.length > MAX_FILES_TO_SHOW){
-                const hiddenCount = analysis.files.length - MAX_FILES_TO_SHOW;
-                console.log(chalk.dim(`\n  ... and ${hiddenCount} more files.`));
-            }
+          if (analysis.files.length > MAX_FILES_TO_SHOW) {
+            const hiddenCount = analysis.files.length - MAX_FILES_TO_SHOW;
+            console.log(chalk.dim(`\n  ... and ${hiddenCount} more files.`));
+          }
         }
 
         if (totalChanges > 500) {
-            console.log(chalk.yellow.bold("⚠️  High Volume Warning"));
-            console.log(chalk.yellow(`This diff contains ${totalChanges} lines of changes.`));
-            console.log(chalk.dim("Large diffs can cause AI context limits to max out or degrade commit message quality."));
-            console.log(chalk.dim(`Consider breaking this into smaller, atomic commits using 'git add -p'.`));
-          }
+          console.log(chalk.yellow.bold("⚠️  High Volume Warning"));
+          console.log(
+            chalk.yellow(
+              `This diff contains ${totalChanges} lines of changes.`,
+            ),
+          );
+          console.log(
+            chalk.dim(
+              "Large diffs can cause AI context limits to max out or degrade commit message quality.",
+            ),
+          );
+          console.log(
+            chalk.dim(
+              `Consider breaking this into smaller, atomic commits using 'git add -p'.`,
+            ),
+          );
+        }
 
-          console.log("");
-      } catch (error:any) {
-        console.error(`\n ${chalk.red.bold("Internal Error : ")}`,error);
+        console.log("");
+      } catch (error: any) {
+        console.error(`\n ${chalk.red.bold("Internal Error : ")}`, error);
+      }
+    });
+
+  //------------Generate Command------------
+
+  program
+    .command("generate")
+    .description("Generate Commit Message ")
+    .action(async () => {
+      try {
+        const diffData = await getGitDiff();
+
+        const analysis = analyzeDiff(diffData.combined);
+
+        if (analysis.files.length === 0) {
+          console.log(
+            chalk.yellow(
+              "\n⚠️  No changes detected. Modify or stage files before generating a commit message.\n",
+            ),
+          );
+          return;
+        }
+
+        console.log(chalk.cyan.bold("\n Commit-AI Generator\n"));
+        console.log(chalk.dim("─".repeat(40)));
+
+        let message: string;
+
+        const spinner = ora("Analyzing diff and reading commit history...").start();
+
+        try {
+          const pastCommits = await getRecentCommits(10);
+
+          spinner.text =  "Generating smart commit message...";
+
+          message = await generateAICommitMessage(diffData.combined) ?? "";
+
+          spinner.succeed(chalk.green("Commit message generated successfully!"));
+        } catch (error:any) {
+
+          spinner.fail(chalk.yellow("AI unavailable, using local generator..."));
+
+          message = generateCommitMessage(analysis);
+        }
+
+        console.log(chalk.white.bold("Suggested Commit Message\n"));
+
+        console.log(`   ${chalk.green.bold(message)}\n`);
+
+        console.log(
+          chalk.dim(
+            `Tip : Run '${chalk.white('git commit -m "<message>"')}' to use this, or build the '${chalk.white("commit-ai commit")}' command to do it automatically \n`,
+          ),
+        );
+      } catch (error: any) {
+        console.error(`\n${chalk.red.bold("Internal Error : ")}`, error);
       }
     });
 }

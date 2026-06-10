@@ -1,6 +1,15 @@
 import { simpleGit } from "simple-git";
 import fs from "fs/promises";
 const git = simpleGit();
+export async function getRecentCommits(count = 10) {
+    try {
+        const log = await git.log({ maxCount: count });
+        return log.all.map(commit => commit.message).join("\n");
+    }
+    catch (error) {
+        return "";
+    }
+}
 export async function getGitDiff() {
     const unstaged = await git.diff();
     const staged = await git.diff(["--cached"]);

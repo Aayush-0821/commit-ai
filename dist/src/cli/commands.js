@@ -2,8 +2,11 @@ import chalk from "chalk";
 import { analyzeRepository } from "../core/statusAnalyzer.js";
 import path from "path";
 import { calculateReadiness } from "../core/readiness.js";
-import { getGitDiff } from "../git/diff.js";
+import { getGitDiff, getRecentCommits } from "../git/diff.js";
 import { analyzeDiff } from "../core/diffAnalyzer.js";
+import { generateAICommitMessage } from "../ai/commitAI.js";
+import { generateCommitMessage } from "../core/commitGenerator.js";
+import ora from "ora";
 function formatFilePath(fullPath) {
     const fileName = path.basename(fullPath);
     const dirName = path.dirname(fullPath);
@@ -158,6 +161,40 @@ Run ${chalk.bold.white("git init")} inside your project root to initialize one.
         }
         catch (error) {
             console.error(`\n ${chalk.red.bold("Internal Error : ")}`, error);
+        }
+    });
+    //------------Generate Command------------
+    program
+        .command("generate")
+        .description("Generate Commit Message ")
+        .action(async () => {
+        try {
+            const diffData = await getGitDiff();
+            const analysis = analyzeDiff(diffData.combined);
+            if (analysis.files.length === 0) {
+                console.log(chalk.yellow("\n⚠️  No changes detected. Modify or stage files before generating a commit message.\n"));
+                return;
+            }
+            console.log(chalk.cyan.bold("\n Commit-AI Generator\n"));
+            console.log(chalk.dim("─".repeat(40)));
+            let message;
+            const spinner = ora("Analyzing diff and reading commit history...").start();
+            try {
+                const pastCommits = await getRecentCommits(10);
+                spinner.text = "Generating smart commit message...";
+                message = await generateAICommitMessage(diffData.combined) ?? "";
+                spinner.succeed(chalk.green("Commit message generated successfully!"));
+            }
+            catch (error) {
+                spinner.fail(chalk.yellow("AI unavailable, using local generator..."));
+                message = generateCommitMessage(analysis);
+            }
+            console.log(chalk.white.bold("Suggested Commit Message\n"));
+            console.log(`   ${chalk.green.bold(message)}\n`);
+            console.log(chalk.dim(`Tip : Run '${chalk.white('git commit -m "<message>"')}' to use this, or build the '${chalk.white("commit-ai commit")}' command to do it automatically \n`));
+        }
+        catch (error) {
+            console.error(`\n${chalk.red.bold("Internal Error : ")}`, error);
         }
     });
 }
