@@ -8,13 +8,12 @@ import { analyzeDiff } from "../core/diffAnalyzer.js";
 import { generateAICommitMessage } from "../ai/commitAI.js";
 import { generateCommitMessage } from "../core/commitGenerator.js";
 
-import { stageAll, commit, push } from "../git/actions.js";
+import { stageAll, commit, pushBranch } from "../git/actions.js";
 
 import { setPushPermissions, canPush } from "./session.js";
 
 export async function runCommitWorkflow() {
   console.log(chalk.cyan.bold("\n Commit-AI Auto Commit\n"));
-  console.log(chalk.dim("─".repeat(40)));
 
   const analyzeSpinner = ora("Analyzing Repository Status...").start();
   const status = await analyzeRepository();
@@ -33,7 +32,7 @@ export async function runCommitWorkflow() {
   const pastCommits = await getRecentCommits(10);
   diffSpinner.succeed("Changes and history loaded.\n");
 
-  let message;
+  let message = "";
   let isMessageAccepted = false;
 
   while (!isMessageAccepted) {
@@ -68,7 +67,14 @@ export async function runCommitWorkflow() {
     }
 
     if (answer.action === "regenerate") {
-      console.log(chalk.dim("\n─".repeat(40)));
+      const regenSpinner = ora("Discarding Previous Message...").start();
+
+      await new Promise(resolve => setTimeout(resolve,600));
+
+      regenSpinner.stopAndPersist({
+        text:chalk.dim("Retrying AI Generation...\n")
+      });
+      
       continue;
     }
 
@@ -78,7 +84,7 @@ export async function runCommitWorkflow() {
           type: "input",
           name: "editedMessage",
           message: "Modify your commit message:",
-          default: message // Pre-fills the input with the AI's suggestion!
+          default: message 
         }
       ]);
       message = editAnswer.editedMessage;
@@ -99,7 +105,7 @@ export async function runCommitWorkflow() {
   // 5. Push Logic
   if (canPush()) {
     const pushSpinner = ora("Pushing to remote...").start();
-    await push();
+    await pushBranch(status.branch);
     pushSpinner.succeed(chalk.green("Pushed to remote successfully!\n"));
     return;
   }
@@ -116,7 +122,7 @@ export async function runCommitWorkflow() {
   if (pushAnswer.push) {
     setPushPermissions(true);
     const pushSpinner = ora("Pushing to remote...").start();
-    await push();
+    await pushBranch(status.branch);
     pushSpinner.succeed(chalk.green("Pushed to remote successfully!\n"));
   } else {
     console.log(chalk.dim("Changes remain locally committed.\n"));

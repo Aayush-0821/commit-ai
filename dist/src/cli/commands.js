@@ -8,6 +8,7 @@ import { generateAICommitMessage } from "../ai/commitAI.js";
 import { generateCommitMessage } from "../core/commitGenerator.js";
 import ora from "ora";
 import { runCommitWorkflow } from "../workflow/commitWorkflow.js";
+import { runPRWorkflow } from "../workflow/prWorkflow.js";
 function formatFilePath(fullPath) {
     const fileName = path.basename(fullPath);
     const dirName = path.dirname(fullPath);
@@ -209,5 +210,12 @@ Run ${chalk.bold.white("git init")} inside your project root to initialize one.
         catch (error) {
             console.log(error);
         }
+    });
+    //---------------Pull Request Command------------
+    program
+        .command("pr")
+        .description("Create Automated Pull Request!")
+        .action(async () => {
+        await runPRWorkflow();
     });
 }
