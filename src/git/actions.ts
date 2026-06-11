@@ -12,6 +12,12 @@ export async function commit(
     await git.commit(message);
 }
 
-export async function push(){
-    await git.push();
+export async function pushBranch(
+    branch:string
+){
+    await git.push(
+        "origin",
+        branch,
+        ["-u"]
+    );
 }
