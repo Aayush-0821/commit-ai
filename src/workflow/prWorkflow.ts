@@ -11,6 +11,7 @@ import { analyzeDiff } from "../core/diffAnalyzer.js";
 import { generateAICommitMessage } from "../ai/commitAI.js";
 import { generatePRContent } from "../github/prGenerator.js";
 import { createPullRequest } from "../github/pullRequest.js";
+import { generateBranchName } from "../core/branchGenerator.js";
 
 export async function runPRWorkflow() {
   console.log(chalk.cyan.bold("\n Commit-AI PR Assistant\n"));
@@ -18,8 +19,14 @@ export async function runPRWorkflow() {
 
   // 1. Pre-flight check for GitHub Token
   if (!process.env.GITHUB_TOKEN) {
-    console.log(chalk.red("❌ Error: GITHUB_TOKEN environment variable is missing."));
-    console.log(chalk.yellow("Please set it in your .env file to create Pull Requests.\n"));
+    console.log(
+      chalk.red("❌ Error: GITHUB_TOKEN environment variable is missing."),
+    );
+    console.log(
+      chalk.yellow(
+        "Please set it in your .env file to create Pull Requests.\n",
+      ),
+    );
     return;
   }
 
@@ -45,31 +52,31 @@ export async function runPRWorkflow() {
     return;
   }
 
+  // 3. Generate AI Content FIRST (so we have the message for the branch name)
+  const aiSpinner = ora("AI is analyzing changes and drafting PR...").start();
+  let message = "chore: update changes";
+  let pr = { title: "Update", body: "Automated PR created by Commit-AI" };
+
+  try {
+    message = (await generateAICommitMessage(diff.combined)) || message;
+    pr = await generatePRContent(diff.combined);
+    aiSpinner.succeed("PR Draft Generated!");
+  } catch (error: any) {
+    aiSpinner.fail(chalk.yellow("AI unavailable. Using default PR template."));
+  }
+
+  const suggestedBranch = generateBranchName(analysis,message);
   // 3. Ask for Branch Name
   const branchAnswer = await inquirer.prompt([
     {
       type: "input",
       name: "branchName",
       message: "What should we name this new branch?",
-      default: `feature/update-${Date.now().toString().slice(-4)}`
-    }
+      default: suggestedBranch,
+    },
   ]);
-  const branch = branchAnswer.branchName;
-  await createBranch(branch);
-  console.log(chalk.green(`✔ Switched to new branch: ${branch}\n`));
-
-  // 4. Generate AI Content
-  const aiSpinner = ora("AI is analyzing changes and drafting PR...").start();
-  let message = "chore: update changes";
-  let pr = { title: "Update", body: "Automated PR created by Commit-AI" };
-
-  try {
-    message = await generateAICommitMessage(diff.combined) || message;
-    pr = await generatePRContent(diff.combined);
-    aiSpinner.succeed("PR Draft Generated!");
-  } catch (error: any) {
-    aiSpinner.fail(chalk.yellow("AI unavailable. Using default PR template."));
-  }
+  const finalBranch = await createBranch(branchAnswer.branchName);
+  console.log(chalk.green(`✔ Switched to new branch: ${finalBranch}\n`));
 
   // 5. Interactive Review Loop
   let isAccepted = false;
@@ -89,9 +96,9 @@ export async function runPRWorkflow() {
           { name: " Looks good, Ship It!", value: "proceed" },
           { name: "  Edit PR Title", value: "edit_title" },
           { name: "  Edit PR Body", value: "edit_body" },
-          { name: " Cancel", value: "cancel" }
-        ]
-      }
+          { name: " Cancel", value: "cancel" },
+        ],
+      },
     ]);
 
     if (answer.action === "cancel") {
@@ -100,12 +107,26 @@ export async function runPRWorkflow() {
     }
 
     if (answer.action === "edit_title") {
-      const edit = await inquirer.prompt([{ type: "input", name: "title", message: "PR Title:", default: pr.title }]);
+      const edit = await inquirer.prompt([
+        {
+          type: "input",
+          name: "title",
+          message: "PR Title:",
+          default: pr.title,
+        },
+      ]);
       pr.title = edit.title;
     }
 
     if (answer.action === "edit_body") {
-      const edit = await inquirer.prompt([{ type: "editor", name: "body", message: "Edit PR Body:", default: pr.body }]);
+      const edit = await inquirer.prompt([
+        {
+          type: "editor",
+          name: "body",
+          message: "Edit PR Body:",
+          default: pr.body,
+        },
+      ]);
       pr.body = edit.body;
     }
 
@@ -115,16 +136,15 @@ export async function runPRWorkflow() {
   }
 
   // 6. Execute Git & GitHub Commands
-  console.log(chalk.dim("\n─".repeat(40)));
   const gitSpinner = ora("Staging, committing, and pushing...").start();
   await stageAll();
   await commit(message);
-  await pushBranch(branch);
+  await pushBranch(finalBranch);
   gitSpinner.succeed("Code securely pushed to remote.");
 
   const prSpinner = ora("Opening Pull Request on GitHub...").start();
   try {
-    const url = await createPullRequest(owner, repo, pr.title, pr.body, branch);
+    const url = await createPullRequest(owner, repo, pr.title, pr.body, finalBranch);
     prSpinner.succeed(chalk.green.bold("Pull Request Successfully Created!"));
     console.log(`\n ${chalk.cyan.underline(url)}\n`);
   } catch (error: any) {
