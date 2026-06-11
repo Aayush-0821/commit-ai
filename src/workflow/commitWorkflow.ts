@@ -90,8 +90,6 @@ export async function runCommitWorkflow() {
     }
   }
 
-  console.log(chalk.dim("\n─".repeat(40)));
-
   // 4. Executing Git Commands with Spinners
   const gitSpinner = ora("Staging all files and committing...").start();
   await stageAll();
