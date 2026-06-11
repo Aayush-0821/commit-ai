@@ -8,6 +8,7 @@ import { analyzeDiff } from "../core/diffAnalyzer.js";
 import { generateAICommitMessage } from "../ai/commitAI.js";
 import { generateCommitMessage } from "../core/commitGenerator.js";
 import ora from "ora";
+import { runCommitWorkflow } from "../workflow/commitWorkflow.js";
 
 function formatFilePath(fullPath: string): string {
   const fileName = path.basename(fullPath);
@@ -280,4 +281,17 @@ Run ${chalk.bold.white("git init")} inside your project root to initialize one.
         console.error(`\n${chalk.red.bold("Internal Error : ")}`, error);
       }
     });
+
+    //-------------Commit Command---------------
+
+    program
+    .command("commit")
+    .description("Analyze,commit and push changes")
+    .action(async()=>{
+      try {
+        await runCommitWorkflow();
+      } catch (error) {
+        console.log(error);
+      }
+    })
 }
