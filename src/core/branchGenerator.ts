@@ -42,6 +42,11 @@ function clean(
 ){
     return text
     .trim()
+    .toLowerCase()
     .replace(/[^a-z0-9]+/g,"-")
-    .slice(0,40);
+    .split("-")
+    .filter((word)=>word.length>2)
+    .filter((word)=>word!=="add" && word !== "update" && word !== "fix")
+    .slice(0,3)
+    .join("-");
 }

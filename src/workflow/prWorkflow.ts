@@ -12,6 +12,7 @@ import { generateAICommitMessage } from "../ai/commitAI.js";
 import { generatePRContent } from "../github/prGenerator.js";
 import { createPullRequest } from "../github/pullRequest.js";
 import { generateBranchName } from "../core/branchGenerator.js";
+import { analyzeRepository } from "../core/statusAnalyzer.js";
 
 export async function runPRWorkflow() {
   console.log(chalk.cyan.bold("\n Commit-AI PR Assistant\n"));
@@ -44,12 +45,35 @@ export async function runPRWorkflow() {
     return;
   }
 
+  const status = await analyzeRepository();
   const diff = await getGitDiff();
   const analysis = analyzeDiff(diff.combined);
 
   if (analysis.files.length === 0) {
     console.log(chalk.yellow("\n⚠️  No changes found to create a PR for.\n"));
     return;
+  }
+
+  let branch = status.branch;
+  const isMainBranch = branch === "main" || branch === "master";
+
+  if(!isMainBranch){
+    console.log(`\n You are currently on : ${chalk.cyan.bold(branch)}`);
+    const reuseAnswer = await inquirer.prompt([
+        {
+            type:"confirm",
+            name:"reuse",
+            message:"Do you want to update this existing branch instead of making a new one?",
+            default:true
+        }
+    ]);
+
+    if(!reuseAnswer.reuse){
+        branch = "";
+    }
+  }
+  else{
+    branch = "";
   }
 
   // 3. Generate AI Content FIRST (so we have the message for the branch name)

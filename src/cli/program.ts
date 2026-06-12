@@ -31,6 +31,7 @@ program.action(() => {
     ${chalk.green("commit-ai diff")}      ${chalk.dim("Analyze uncommitted changes")}
     ${chalk.green("commit-ai generate")}  ${chalk.dim("Generate a smart commit message")}
     ${chalk.green("commit-ai commit")}    ${chalk.dim("Run the full auto-commit flow")}
+    ${chalk.green("commit-ai pr")}        ${chalk.dim("Create an automated Pull Request")}
   `;
 
   console.log(logo);
