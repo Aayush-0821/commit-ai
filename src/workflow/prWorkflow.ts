@@ -13,20 +13,18 @@ import { generatePRContent } from "../github/prGenerator.js";
 import { createPullRequest } from "../github/pullRequest.js";
 import { generateBranchName } from "../core/branchGenerator.js";
 import { analyzeRepository } from "../core/statusAnalyzer.js";
+import { getConfig } from "../config/configManager.js";
 
 export async function runPRWorkflow() {
   console.log(chalk.cyan.bold("\n Commit-AI PR Assistant\n"));
   console.log(chalk.dim("─".repeat(40)));
+  const config = getConfig();
 
   // 1. Pre-flight check for GitHub Token
-  if (!process.env.GITHUB_TOKEN) {
+  if (!config?.githubToken) {
+    console.log(chalk.red("❌ Error: GITHUB_TOKEN is missing."));
     console.log(
-      chalk.red("❌ Error: GITHUB_TOKEN environment variable is missing."),
-    );
-    console.log(
-      chalk.yellow(
-        "Please set it in your .env file to create Pull Requests.\n",
-      ),
+      chalk.yellow("Run commit-ai init and add your GitHub token.\n"),
     );
     return;
   }
@@ -57,22 +55,22 @@ export async function runPRWorkflow() {
   let branch = status.branch;
   const isMainBranch = branch === "main" || branch === "master";
 
-  if(!isMainBranch){
+  if (!isMainBranch) {
     console.log(`\n You are currently on : ${chalk.cyan.bold(branch)}`);
     const reuseAnswer = await inquirer.prompt([
-        {
-            type:"confirm",
-            name:"reuse",
-            message:"Do you want to update this existing branch instead of making a new one?",
-            default:true
-        }
+      {
+        type: "confirm",
+        name: "reuse",
+        message:
+          "Do you want to update this existing branch instead of making a new one?",
+        default: true,
+      },
     ]);
 
-    if(!reuseAnswer.reuse){
-        branch = "";
+    if (!reuseAnswer.reuse) {
+      branch = "";
     }
-  }
-  else{
+  } else {
     branch = "";
   }
 
@@ -89,17 +87,65 @@ export async function runPRWorkflow() {
     aiSpinner.fail(chalk.yellow("AI unavailable. Using default PR template."));
   }
 
-  const suggestedBranch = generateBranchName(analysis,message);
+  const suggestedBranch = generateBranchName(analysis, message);
   // 3. Ask for Branch Name
-  const branchAnswer = await inquirer.prompt([
+  // Branch Selection
+  let finalBranchName = suggestedBranch;
+
+  const branchChoice = await inquirer.prompt([
     {
-      type: "input",
-      name: "branchName",
-      message: "What should we name this new branch?",
-      default: suggestedBranch,
+      type: "select",
+      name: "branchAction",
+      message: `Suggested branch: ${chalk.cyan(suggestedBranch)}`,
+      choices: [
+        {
+          name: "✔ Use this branch name",
+          value: "use",
+        },
+        {
+          name: "  Edit branch name",
+          value: "edit",
+        },
+        {
+          name: " Cancel PR creation",
+          value: "cancel",
+        },
+      ],
     },
   ]);
-  const finalBranch = await createBranch(branchAnswer.branchName);
+
+  // Cancel
+  if (branchChoice.branchAction === "cancel") {
+    console.log(chalk.red("\nPR creation cancelled.\n"));
+
+    return;
+  }
+
+  // Edit
+  if (branchChoice.branchAction === "edit") {
+    const editAnswer = await inquirer.prompt([
+      {
+        type: "input",
+        name: "branchName",
+        message: "Enter new branch name:",
+        default: suggestedBranch,
+
+        validate(value) {
+          if (!value.trim()) {
+            return "Branch name cannot be empty";
+          }
+
+          return true;
+        },
+      },
+    ]);
+
+    finalBranchName = editAnswer.branchName;
+  }
+
+  // Create branch
+  const finalBranch = await createBranch(finalBranchName);
+
   console.log(chalk.green(`✔ Switched to new branch: ${finalBranch}\n`));
 
   // 5. Interactive Review Loop
@@ -168,7 +214,13 @@ export async function runPRWorkflow() {
 
   const prSpinner = ora("Opening Pull Request on GitHub...").start();
   try {
-    const url = await createPullRequest(owner, repo, pr.title, pr.body, finalBranch);
+    const url = await createPullRequest(
+      owner,
+      repo,
+      pr.title,
+      pr.body,
+      finalBranch,
+    );
     prSpinner.succeed(chalk.green.bold("Pull Request Successfully Created!"));
     console.log(`\n ${chalk.cyan.underline(url)}\n`);
   } catch (error: any) {

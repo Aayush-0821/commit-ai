@@ -10,6 +10,7 @@ import { generateCommitMessage } from "../core/commitGenerator.js";
 import ora from "ora";
 import { runCommitWorkflow } from "../workflow/commitWorkflow.js";
 import { runPRWorkflow } from "../workflow/prWorkflow.js";
+import { initCommand } from "../commands/init.js";
 
 function formatFilePath(fullPath: string): string {
   const fileName = path.basename(fullPath);
@@ -305,5 +306,16 @@ Run ${chalk.bold.white("git init")} inside your project root to initialize one.
     )
     .action(async()=>{
       await runPRWorkflow();
+    });
+
+    //--------------Init Command----------------------
+
+    program
+    .command("init")
+    .description(
+      "Configure Commit-AI"
+    )
+    .action(async()=>{
+      await initCommand()
     });
 }

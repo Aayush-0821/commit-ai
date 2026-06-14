@@ -1,9 +1,10 @@
-import { openai } from "./client.js";
+import { getOpenAIClient } from "./client.js";
 
 export async function generateAICommitMessage(
     diff:string,
     pastCommits:string = ""
 ){
+    const openai = getOpenAIClient();
     const response = await openai.chat.completions.create({
        model:"openrouter/free",
         messages:[

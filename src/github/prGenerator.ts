@@ -1,6 +1,7 @@
-import { openai } from "../ai/client.js";
+import { getOpenAIClient } from "../ai/client.js";
 
 export async function generatePRContent(diff: string) {
+    const openai = getOpenAIClient();
   const response = await openai.chat.completions.create({
     model: "openrouter/free",
     messages: [
