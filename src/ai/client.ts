@@ -1,16 +1,25 @@
 import OpenAI from "openai";
-import dotenv from "dotenv";
+import { getConfig } from "../config/configManager.js";
 
-dotenv.config();
 
-export const openai = new OpenAI({
-    apiKey : process.env.OPENROUTER_API_KEY,
+export function getOpenAIClient(){
 
-    baseURL:
-    "https://openrouter.ai/api/v1",
+    const config = getConfig();
 
-    defaultHeaders:{
-        "HTTP-Referer":"http://localhost",
-        "X-Title":"Commit-AI"
+
+    if(!config?.apiKey){
+        throw new Error(
+            "NO_AI_CONFIG"
+        );
     }
-});
+
+    return new OpenAI({
+
+        apiKey: config.apiKey,
+
+        baseURL:
+        "https://openrouter.ai/api/v1"
+
+    });
+
+}
