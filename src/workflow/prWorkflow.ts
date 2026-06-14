@@ -57,18 +57,39 @@ export async function runPRWorkflow() {
 
   if (!isMainBranch) {
     console.log(`\n You are currently on : ${chalk.cyan.bold(branch)}`);
-    const reuseAnswer = await inquirer.prompt([
-      {
-        type: "confirm",
-        name: "reuse",
-        message:
-          "Do you want to update this existing branch instead of making a new one?",
-        default: true,
-      },
+
+    const branchDecision = await inquirer.prompt([
+        {
+            type:"select",
+            name:"action",
+            message:"What would you like to do?",
+            choices:[
+                {
+                    name:"Use Existing Branch",
+                    value:"reuse"
+                },
+                {
+                    name:"Create New Branch",
+                    value:"new"
+                },{
+                    name:"Cancel",
+                    value:"cancel"
+                }
+            ]
+        }
     ]);
 
-    if (!reuseAnswer.reuse) {
-      branch = "";
+    if(branchDecision.action === "cancel"){
+        console.log(chalk.red("\n PR Creation Cancelled\n"));
+        return;
+    }
+
+    if(branchDecision.action === "reuse"){
+        console.log(chalk.green(`Using Existing Branch : ${branch}\n`));
+    }
+
+    if(branchDecision.action === "new"){
+        branch = "";
     }
   } else {
     branch = "";
