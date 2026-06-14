@@ -3,7 +3,7 @@ import inquirer from "inquirer";
 import ora from "ora";
 
 import { analyzeRepository } from "../core/statusAnalyzer.js";
-import { getGitDiff,getRecentCommits } from "../git/diff.js";
+import { getGitDiff, getRecentCommits } from "../git/diff.js";
 import { analyzeDiff } from "../core/diffAnalyzer.js";
 import { generateAICommitMessage } from "../ai/commitAI.js";
 import { generateCommitMessage } from "../core/commitGenerator.js";
@@ -12,14 +12,24 @@ import { stageAll, commit, pushBranch } from "../git/actions.js";
 
 import { setPushPermissions, canPush } from "./session.js";
 
+import { getConfig } from "../config/configManager.js";
+
 export async function runCommitWorkflow() {
   console.log(chalk.cyan.bold("\n Commit-AI Auto Commit\n"));
 
   const analyzeSpinner = ora("Analyzing Repository Status...").start();
   const status = await analyzeRepository();
+  const config = getConfig();
+
+  if(!config){
+    console.log(chalk.yellow("Commit-AI is not Configured. Run commit-ai init first"));
+    return;
+  }
 
   if (status.clean) {
-    analyzeSpinner.info(chalk.yellow(chalk.green("No changes detected,Working Tree is clean.")));
+    analyzeSpinner.info(
+      chalk.yellow(chalk.green("No changes detected,Working Tree is clean.")),
+    );
 
     return;
   }
@@ -38,15 +48,18 @@ export async function runCommitWorkflow() {
   while (!isMessageAccepted) {
     const aiSpinner = ora("AI is writing your commit message...").start();
     try {
-      message = await generateAICommitMessage(diffData.combined,pastCommits) || "";
+      message =
+        (await generateAICommitMessage(diffData.combined, pastCommits)) || "";
       aiSpinner.succeed("Message Generated !");
     } catch (error: any) {
-        aiSpinner.fail(chalk.yellow("AI unavaliable. Using local generator fallback."));
+      aiSpinner.fail(
+        chalk.yellow("AI unavaliable. Using local generator fallback."),
+      );
       message = generateCommitMessage(analysis);
     }
     console.log(`\n ${chalk.white.bold("Suggested Commit : ")}`);
     console.log(`   ${chalk.green.bold(message)}\n`);
-  // Interactive choices
+    // Interactive choices
     const answer = await inquirer.prompt([
       {
         type: "select",
@@ -56,9 +69,9 @@ export async function runCommitWorkflow() {
           { name: "Accept and Commit", value: "commit" },
           { name: "Edit Message manually", value: "edit" },
           { name: "Regenerate with AI", value: "regenerate" },
-          { name: "Cancel", value: "cancel" }
-        ]
-      }
+          { name: "Cancel", value: "cancel" },
+        ],
+      },
     ]);
 
     if (answer.action === "cancel") {
@@ -69,12 +82,12 @@ export async function runCommitWorkflow() {
     if (answer.action === "regenerate") {
       const regenSpinner = ora("Discarding Previous Message...").start();
 
-      await new Promise(resolve => setTimeout(resolve,600));
+      await new Promise((resolve) => setTimeout(resolve, 600));
 
       regenSpinner.stopAndPersist({
-        text:chalk.dim("Retrying AI Generation...\n")
+        text: chalk.dim("Retrying AI Generation...\n"),
       });
-      
+
       continue;
     }
 
@@ -84,39 +97,62 @@ export async function runCommitWorkflow() {
           type: "input",
           name: "editedMessage",
           message: "Modify your commit message:",
-          default: message 
-        }
+          default: message,
+        },
       ]);
       message = editAnswer.editedMessage;
-      isMessageAccepted = true; 
+      isMessageAccepted = true;
     }
 
     if (answer.action === "commit") {
-      isMessageAccepted = true; 
+      isMessageAccepted = true;
     }
   }
 
   // 4. Executing Git Commands with Spinners
   const gitSpinner = ora("Staging all files and committing...").start();
   await stageAll();
+  if (config.preferences.confirmBeforeCommit) {
+    const answer = await inquirer.prompt([
+      {
+        type: "confirm",
+        name: "ok",
+        message: "Commit these changes?",
+      },
+    ]);
+
+    if (!answer.ok) return;
+  }
+
   await commit(message);
   gitSpinner.succeed(chalk.green("Changes committed successfully!"));
 
   // 5. Push Logic
-  if (canPush()) {
+  if (canPush() || config.preferences.autoPush) {
     const pushSpinner = ora("Pushing to remote...").start();
     await pushBranch(status.branch);
     pushSpinner.succeed(chalk.green("Pushed to remote successfully!\n"));
     return;
   }
 
+  if(
+config.preferences.autoPush
+){
+
+await pushBranch(status.branch);
+
+return;
+
+}
+
+
   const pushAnswer = await inquirer.prompt([
     {
       type: "confirm",
       name: "push",
       message: "Do you want to push these changes to remote?",
-      default: true
-    }
+      default: true,
+    },
   ]);
 
   if (pushAnswer.push) {

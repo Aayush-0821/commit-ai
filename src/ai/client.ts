@@ -7,18 +7,24 @@ export function getOpenAIClient(){
     const config = getConfig();
 
 
-    if(!config?.apiKey){
+    if(!config){
         throw new Error(
-            "NO_AI_CONFIG"
+            "Commit-AI is not configured. Run commit-ai init first."
         );
     }
 
+
     return new OpenAI({
 
-        apiKey: config.apiKey,
+        apiKey: config?.apiKey ?? "",
+
 
         baseURL:
+        config.provider === "openrouter"
+        ?
         "https://openrouter.ai/api/v1"
+        :
+        undefined
 
     });
 
