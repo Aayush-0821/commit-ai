@@ -95,16 +95,16 @@ export async function runPRWorkflow() {
 
   let finalBranch = status.branch;
 
-  if(status.branch === "HEAD"){
+  if (status.branch === "HEAD") {
     console.log(chalk.yellow("\n⚠️ You are currently not on a branch."));
 
     const fix = await inquirer.prompt([
-        {
-            type:"input",
-            name:"branch",
-            message:"Create/Switch to branch : ",
-            default:"feature/commit-ai",
-        },
+      {
+        type: "input",
+        name: "branch",
+        message: "Create/Switch to branch : ",
+        default: "feature/commit-ai",
+      },
     ]);
 
     finalBranch = await createBranch(fix.branch);
@@ -267,35 +267,54 @@ export async function runPRWorkflow() {
     return;
   }
 
-  // ---------------- Commit ----------------
-
-  const gitSpinner = ora("Committing changes...").start();
-
-  await stageAll();
-
-  await commit(message);
-
-  gitSpinner.succeed("Changes committed");
-
-  // ---------------- Push ----------------
-
-  const pushSpinner = ora("Pushing changes...").start();
-
-  if(finalBranch === "HEAD"){
-    console.log(chalk.red("Cannot Push detached HEAD"));
-
-    return;
-  }
-
-  await pushBranch(finalBranch);
-
-  pushSpinner.succeed("Code pushed");
-
   // ---------------- PR ----------------
 
   const prSpinner = ora("Creating GitHub PR...").start();
 
   try {
+    // Prevent creating PR from main -> main
+    const baseBranch = "main";
+
+    if (finalBranch === baseBranch) {
+      console.log(chalk.yellow("\n⚠️ PR cannot be created from main to main"));
+
+      const answer = await inquirer.prompt([
+        {
+          type: "confirm",
+          name: "createBranch",
+          message: "Create feature branch automatically?",
+          default: true,
+        },
+      ]);
+
+      if (!answer.createBranch) {
+        console.log(chalk.red("PR cancelled"));
+        return;
+      }
+
+      const branchName = generateBranchName(analysis, message);
+
+      finalBranch = await createBranch(branchName);
+
+      console.log(chalk.green(`✔ Created ${finalBranch}`));
+    }
+
+    // ALWAYS COMMIT
+    const gitSpinner = ora("Committing changes...").start();
+
+    await stageAll();
+
+    await commit(message);
+
+    gitSpinner.succeed("Changes committed");
+
+    // ALWAYS PUSH
+    const pushSpinner = ora("Pushing changes...").start();
+
+    await pushBranch(finalBranch);
+
+    pushSpinner.succeed("Code pushed");
+
     const url = await createPullRequest(
       owner,
       repo,
@@ -303,7 +322,6 @@ export async function runPRWorkflow() {
       pr.body,
       finalBranch,
     );
-
     prSpinner.succeed("Pull Request Created!");
 
     console.log(chalk.cyan.underline(url));
