@@ -4,243 +4,335 @@ import ora from "ora";
 
 import { getRemoteUrl } from "../git/remote.js";
 import { parseGithubUrl } from "../github/parser.js";
-import { createBranch } from "../git/branch.js";
+
+import { createBranch, getBranches } from "../git/branch.js";
 import { stageAll, commit, pushBranch } from "../git/actions.js";
 import { getGitDiff } from "../git/diff.js";
+
 import { analyzeDiff } from "../core/diffAnalyzer.js";
 import { generateAICommitMessage } from "../ai/commitAI.js";
 import { generatePRContent } from "../github/prGenerator.js";
+
 import { createPullRequest } from "../github/pullRequest.js";
+
 import { generateBranchName } from "../core/branchGenerator.js";
 import { analyzeRepository } from "../core/statusAnalyzer.js";
 import { getConfig } from "../config/configManager.js";
+import { prepareBranchSwitch } from "./branchManager.js";
 
 export async function runPRWorkflow() {
   console.log(chalk.cyan.bold("\n Commit-AI PR Assistant\n"));
   console.log(chalk.dim("─".repeat(40)));
+
   const config = getConfig();
 
-  // 1. Pre-flight check for GitHub Token
   if (!config?.githubToken) {
-    console.log(chalk.red("❌ Error: GITHUB_TOKEN is missing."));
-    console.log(
-      chalk.yellow("Run commit-ai init and add your GitHub token.\n"),
-    );
+    console.log(chalk.red("❌ GitHub token missing"));
+    console.log(chalk.yellow("Run commit-ai init first\n"));
+
     return;
   }
 
-  // 2. Fetch changes
-  const initSpinner = ora("Analyzing repository and remote...").start();
-  let remote, owner, repo;
+  // ---------------- Repository ----------------
+
+  let owner = "";
+  let repo = "";
+
   try {
-    remote = await getRemoteUrl();
+    const remote = await getRemoteUrl();
+
     const parsed = parseGithubUrl(remote);
+
     owner = parsed.owner;
     repo = parsed.repo;
-    initSpinner.succeed(`Target repository: ${chalk.bold(`${owner}/${repo}`)}`);
-  } catch (error) {
-    initSpinner.fail(chalk.red("Could not detect GitHub remote origin."));
+
+    console.log(chalk.green(`✔ Repository: ${owner}/${repo}`));
+  } catch {
+    console.log(chalk.red("❌ Cannot detect GitHub repository"));
+
     return;
   }
 
-  const status = await analyzeRepository();
-  const diff = await getGitDiff();
-  const analysis = analyzeDiff(diff.combined);
+  // ---------------- Analyze Current Changes ----------------
+
+  let diff = await getGitDiff();
+
+  let analysis = analyzeDiff(diff.combined);
 
   if (analysis.files.length === 0) {
-    console.log(chalk.yellow("\n⚠️  No changes found to create a PR for.\n"));
+    console.log(chalk.yellow("No changes found for PR"));
+
     return;
   }
 
-  let branch = status.branch;
-  const isMainBranch = branch === "main" || branch === "master";
+  // ---------------- AI Generation ----------------
 
-  if (!isMainBranch) {
-    console.log(`\n You are currently on : ${chalk.cyan.bold(branch)}`);
+  const aiSpinner = ora("AI analyzing changes...").start();
 
-    const branchDecision = await inquirer.prompt([
-        {
-            type:"select",
-            name:"action",
-            message:"What would you like to do?",
-            choices:[
-                {
-                    name:"Use Existing Branch",
-                    value:"reuse"
-                },
-                {
-                    name:"Create New Branch",
-                    value:"new"
-                },{
-                    name:"Cancel",
-                    value:"cancel"
-                }
-            ]
-        }
-    ]);
-
-    if(branchDecision.action === "cancel"){
-        console.log(chalk.red("\n PR Creation Cancelled\n"));
-        return;
-    }
-
-    if(branchDecision.action === "reuse"){
-        console.log(chalk.green(`Using Existing Branch : ${branch}\n`));
-    }
-
-    if(branchDecision.action === "new"){
-        branch = "";
-    }
-  } else {
-    branch = "";
-  }
-
-  // 3. Generate AI Content FIRST (so we have the message for the branch name)
-  const aiSpinner = ora("AI is analyzing changes and drafting PR...").start();
   let message = "chore: update changes";
-  let pr = { title: "Update", body: "Automated PR created by Commit-AI" };
+
+  let pr = {
+    title: "Update changes",
+    body: "Created using Commit-AI",
+  };
 
   try {
     message = (await generateAICommitMessage(diff.combined)) || message;
+
     pr = await generatePRContent(diff.combined);
-    aiSpinner.succeed("PR Draft Generated!");
-  } catch (error: any) {
-    aiSpinner.fail(chalk.yellow("AI unavailable. Using default PR template."));
+
+    aiSpinner.succeed("AI draft generated");
+  } catch {
+    aiSpinner.warn("AI unavailable. Using fallback");
   }
 
-  const suggestedBranch = generateBranchName(analysis, message);
-  // 3. Ask for Branch Name
-  // Branch Selection
-  let finalBranchName = suggestedBranch;
+  // ---------------- Commit Changes ----------------
 
-  const branchChoice = await inquirer.prompt([
+  const commitAnswer = await inquirer.prompt([
+    {
+      type: "confirm",
+
+      name: "commit",
+
+      message: "Commit current changes automatically?",
+
+      default: true,
+    },
+  ]);
+
+  if (commitAnswer.commit) {
+    const spinner = ora("Saving changes...").start();
+
+    await stageAll();
+
+    await commit(message);
+
+    spinner.succeed("Changes committed");
+  }
+
+  // ---------------- Branch Selection ----------------
+
+  let status = await analyzeRepository();
+
+  let finalBranch = status.branch;
+
+  const branches = await getBranches();
+
+  const branchAnswer = await inquirer.prompt([
     {
       type: "select",
-      name: "branchAction",
-      message: `Suggested branch: ${chalk.cyan(suggestedBranch)}`,
+
+      name: "action",
+
+      message: "Where should PR be created?",
+
       choices: [
         {
-          name: "✔ Use this branch name",
-          value: "use",
+          name: `Current branch (${status.branch})`,
+          value: "current",
         },
+
         {
-          name: "  Edit branch name",
-          value: "edit",
+          name: "Existing branch",
+          value: "existing",
         },
+
         {
-          name: " Cancel PR creation",
+          name: "New branch",
+          value: "new",
+        },
+
+        {
+          name: "Cancel",
           value: "cancel",
         },
       ],
     },
   ]);
 
-  // Cancel
-  if (branchChoice.branchAction === "cancel") {
-    console.log(chalk.red("\nPR creation cancelled.\n"));
+  if (branchAnswer.action === "cancel") return;
 
-    return;
+  // CURRENT
+
+  if (branchAnswer.action === "current") {
+    console.log(chalk.green(`✔ Using ${finalBranch}`));
   }
 
-  // Edit
-  if (branchChoice.branchAction === "edit") {
-    const editAnswer = await inquirer.prompt([
+  // EXISTING
+
+  if (branchAnswer.action === "existing") {
+    const selected = await inquirer.prompt([
       {
-        type: "input",
-        name: "branchName",
-        message: "Enter new branch name:",
-        default: suggestedBranch,
+        type: "select",
 
-        validate(value) {
-          if (!value.trim()) {
-            return "Branch name cannot be empty";
-          }
+        name: "branch",
 
-          return true;
-        },
+        message: "Select branch",
+
+        choices: branches,
       },
     ]);
 
-    finalBranchName = editAnswer.branchName;
+    finalBranch = await prepareBranchSwitch(selected.branch);
   }
 
-  // Create branch
-  let finalBranch = branch;
+  // NEW BRANCH
 
-  if(!finalBranch){
-    finalBranch = await createBranch(finalBranchName);
+  if (branchAnswer.action === "new") {
+    const suggested = generateBranchName(analysis, message);
 
-    console.log(chalk.green(`✔ Switched to new branch: ${finalBranch}\n`));
-  }
-  else{
-    console.log(chalk.green(`✔ Using existing branch: ${finalBranch}\n`));
-  }
-
-  // 5. Interactive Review Loop
-  let isAccepted = false;
-  while (!isAccepted) {
-    console.log(`\n ${chalk.white.bold("Pull Request Draft:")}`);
-    console.log(chalk.dim("─".repeat(40)));
-    console.log(`${chalk.bold.magenta("Title:")} ${pr.title}`);
-    console.log(`${chalk.bold.magenta("Body:")}\n${chalk.dim(pr.body)}`);
-    console.log(chalk.dim("─".repeat(40)));
-
-    const answer = await inquirer.prompt([
+    const choice = await inquirer.prompt([
       {
         type: "select",
-        name: "action",
-        message: "How does this PR look?",
+
+        name: "branch",
+
+        message: `Suggested branch ${suggested}`,
+
         choices: [
-          { name: " Looks good, Ship It!", value: "proceed" },
-          { name: "  Edit PR Title", value: "edit_title" },
-          { name: "  Edit PR Body", value: "edit_body" },
-          { name: " Cancel", value: "cancel" },
+          {
+            name: "✔ Use suggested",
+            value: "use",
+          },
+
+          {
+            name: "Edit name",
+            value: "edit",
+          },
+
+          {
+            name: "Cancel",
+            value: "cancel",
+          },
         ],
       },
     ]);
 
-    if (answer.action === "cancel") {
-      console.log(chalk.red("\nPR creation cancelled.\n"));
-      return;
+    if (choice.branch === "cancel") return;
+
+    let branchName = suggested;
+
+    if (choice.branch === "edit") {
+      const edited = await inquirer.prompt([
+        {
+          type: "input",
+
+          name: "name",
+
+          message: "Branch name",
+
+          default: suggested,
+        },
+      ]);
+
+      branchName = edited.name;
     }
 
-    if (answer.action === "edit_title") {
+    finalBranch = await createBranch(branchName);
+
+    console.log(chalk.green(`✔ Created ${finalBranch}`));
+  }
+
+  // ---------------- Refresh Diff ----------------
+
+  diff = await getGitDiff();
+
+  analysis = analyzeDiff(diff.combined);
+
+  // ---------------- Review ----------------
+
+  let accepted = false;
+
+  while (!accepted) {
+    console.log(`\n${chalk.bold("PR Preview")}`);
+
+    console.log(chalk.dim("─".repeat(40)));
+
+    console.log(`${chalk.magenta("Title:")} ${pr.title}`);
+
+    console.log(`${chalk.magenta("Body:")}\n${pr.body}`);
+
+    const answer = await inquirer.prompt([
+      {
+        type: "select",
+
+        name: "action",
+
+        message: "Continue?",
+
+        choices: [
+          {
+            name: "✔ Ship PR",
+            value: "yes",
+          },
+
+          {
+            name: "Edit title",
+            value: "title",
+          },
+
+          {
+            name: "Edit body",
+            value: "body",
+          },
+
+          {
+            name: "Cancel",
+            value: "cancel",
+          },
+        ],
+      },
+    ]);
+
+    if (answer.action === "cancel") return;
+
+    if (answer.action === "title") {
       const edit = await inquirer.prompt([
         {
           type: "input",
-          name: "title",
-          message: "PR Title:",
+
+          name: "value",
+
+          message: "Title",
+
           default: pr.title,
         },
       ]);
-      pr.title = edit.title;
+
+      pr.title = edit.value;
     }
 
-    if (answer.action === "edit_body") {
+    if (answer.action === "body") {
       const edit = await inquirer.prompt([
         {
           type: "editor",
-          name: "body",
-          message: "Edit PR Body:",
+
+          name: "value",
+
+          message: "Body",
+
           default: pr.body,
         },
       ]);
-      pr.body = edit.body;
+
+      pr.body = edit.value;
     }
 
-    if (answer.action === "proceed") {
-      isAccepted = true;
-    }
+    if (answer.action === "yes") accepted = true;
   }
 
-  // 6. Execute Git & GitHub Commands
-  const gitSpinner = ora("Staging, committing, and pushing...").start();
-  await stageAll();
-  await commit(message);
-  await pushBranch(finalBranch);
-  gitSpinner.succeed("Code securely pushed to remote.");
+  // ---------------- Push ----------------
 
-  const prSpinner = ora("Opening Pull Request on GitHub...").start();
+  const pushSpinner = ora("Pushing changes...").start();
+
+  await pushBranch(finalBranch);
+
+  pushSpinner.succeed("Code pushed");
+
+  // ---------------- Create PR ----------------
+
+  const prSpinner = ora("Creating GitHub PR...").start();
+
   try {
     const url = await createPullRequest(
       owner,
@@ -249,10 +341,13 @@ export async function runPRWorkflow() {
       pr.body,
       finalBranch,
     );
-    prSpinner.succeed(chalk.green.bold("Pull Request Successfully Created!"));
-    console.log(`\n ${chalk.cyan.underline(url)}\n`);
+
+    prSpinner.succeed("Pull Request Created!");
+
+    console.log(chalk.cyan.underline(url));
   } catch (error: any) {
-    prSpinner.fail(chalk.red("Failed to create Pull Request."));
-    console.error(chalk.dim(error.message));
+    prSpinner.fail("Failed creating PR");
+
+    console.log(chalk.red(error.message));
   }
 }

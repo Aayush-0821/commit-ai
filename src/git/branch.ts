@@ -2,6 +2,12 @@ import {simpleGit} from "simple-git";
 
 const git = simpleGit();
 
+export async function getBranches(){
+    const result = await git.branchLocal();
+
+    return result.all;
+}
+
 export async function createBranch(
 name:string
 ){
@@ -29,4 +35,12 @@ name:string
 
     return name;
 
+}
+
+export async function switchBranch(
+    name:string
+){
+    await git.checkout(name);
+
+    return name;
 }
