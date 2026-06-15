@@ -1,6 +1,5 @@
 import chalk from "chalk";
 import inquirer from "inquirer";
-import ora from "ora";
 
 import { getRemoteUrl } from "../git/remote.js";
 import { parseGithubUrl } from "../github/parser.js";
@@ -19,6 +18,7 @@ import { generateBranchName } from "../core/branchGenerator.js";
 import { analyzeRepository } from "../core/statusAnalyzer.js";
 import { getConfig } from "../config/configManager.js";
 import { prepareBranchSwitch } from "./branchManager.js";
+import { startSpinner } from "../utils/spinner.js";
 
 export async function runPRWorkflow() {
   console.log(chalk.cyan.bold("\n Commit-AI PR Assistant\n"));
@@ -66,7 +66,7 @@ export async function runPRWorkflow() {
 
   // ---------------- AI ----------------
 
-  const aiSpinner = ora("AI analyzing changes...").start();
+  const aiSpinner = startSpinner("AI analyzing changes...");
 
   let message = "chore: update changes";
 
@@ -169,7 +169,7 @@ export async function runPRWorkflow() {
       },
     ]);
 
-    const spinner = ora("Moving changes safely...").start();
+    const spinner = startSpinner("Moving changes safely...");
 
     try {
       finalBranch = await prepareBranchSwitch(selected.branch);
@@ -269,7 +269,7 @@ export async function runPRWorkflow() {
 
   // ---------------- PR ----------------
 
-  const prSpinner = ora("Creating GitHub PR...").start();
+  const prSpinner = startSpinner("Creating GitHub PR...");
 
   try {
     // Prevent creating PR from main -> main
@@ -300,7 +300,7 @@ export async function runPRWorkflow() {
     }
 
     // ALWAYS COMMIT
-    const gitSpinner = ora("Committing changes...").start();
+    const gitSpinner = startSpinner("Committing changes...");
 
     await stageAll();
 
@@ -309,7 +309,7 @@ export async function runPRWorkflow() {
     gitSpinner.succeed("Changes committed");
 
     // ALWAYS PUSH
-    const pushSpinner = ora("Pushing changes...").start();
+    const pushSpinner = startSpinner("Pushing changes...");
 
     await pushBranch(finalBranch);
 
