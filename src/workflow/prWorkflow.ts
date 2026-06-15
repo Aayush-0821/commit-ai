@@ -29,7 +29,6 @@ export async function runPRWorkflow() {
   if (!config?.githubToken) {
     console.log(chalk.red("❌ GitHub token missing"));
     console.log(chalk.yellow("Run commit-ai init first\n"));
-
     return;
   }
 
@@ -53,7 +52,7 @@ export async function runPRWorkflow() {
     return;
   }
 
-  // ---------------- Analyze Current Changes ----------------
+  // ---------------- Read Changes ----------------
 
   let diff = await getGitDiff();
 
@@ -65,7 +64,7 @@ export async function runPRWorkflow() {
     return;
   }
 
-  // ---------------- AI Generation ----------------
+  // ---------------- AI ----------------
 
   const aiSpinner = ora("AI analyzing changes...").start();
 
@@ -86,29 +85,9 @@ export async function runPRWorkflow() {
     aiSpinner.warn("AI unavailable. Using fallback");
   }
 
-  // ---------------- Commit Changes ----------------
-
-  const commitAnswer = await inquirer.prompt([
-    {
-      type: "confirm",
-
-      name: "commit",
-
-      message: "Commit current changes automatically?",
-
-      default: true,
-    },
-  ]);
-
-  if (commitAnswer.commit) {
-    const spinner = ora("Saving changes...").start();
-
-    await stageAll();
-
-    await commit(message);
-
-    spinner.succeed("Changes committed");
-  }
+  console.log(
+    "\n" + chalk.yellow("Generated Commit:") + " " + chalk.white.bold(message),
+  );
 
   // ---------------- Branch Selection ----------------
 
@@ -121,9 +100,7 @@ export async function runPRWorkflow() {
   const branchAnswer = await inquirer.prompt([
     {
       type: "select",
-
       name: "action",
-
       message: "Where should PR be created?",
 
       choices: [
@@ -150,30 +127,44 @@ export async function runPRWorkflow() {
     },
   ]);
 
-  if (branchAnswer.action === "cancel") return;
+  if (branchAnswer.action === "cancel") {
+    console.log(chalk.yellow("Cancelled. No changes made."));
 
-  // CURRENT
+    return;
+  }
+
+  // CURRENT BRANCH
 
   if (branchAnswer.action === "current") {
     console.log(chalk.green(`✔ Using ${finalBranch}`));
   }
 
-  // EXISTING
+  // EXISTING BRANCH
 
   if (branchAnswer.action === "existing") {
     const selected = await inquirer.prompt([
       {
         type: "select",
-
         name: "branch",
-
         message: "Select branch",
 
         choices: branches,
       },
     ]);
 
-    finalBranch = await prepareBranchSwitch(selected.branch);
+    const spinner = ora("Moving changes safely...").start();
+
+    try {
+      finalBranch = await prepareBranchSwitch(selected.branch);
+
+      spinner.succeed(`Switched to ${finalBranch}`);
+    } catch (error: any) {
+      spinner.fail("Could not switch branch");
+
+      console.log(chalk.red(error.message));
+
+      return;
+    }
   }
 
   // NEW BRANCH
@@ -184,7 +175,6 @@ export async function runPRWorkflow() {
     const choice = await inquirer.prompt([
       {
         type: "select",
-
         name: "branch",
 
         message: `Suggested branch ${suggested}`,
@@ -216,11 +206,8 @@ export async function runPRWorkflow() {
       const edited = await inquirer.prompt([
         {
           type: "input",
-
           name: "name",
-
           message: "Branch name",
-
           default: suggested,
         },
       ]);
@@ -233,93 +220,45 @@ export async function runPRWorkflow() {
     console.log(chalk.green(`✔ Created ${finalBranch}`));
   }
 
-  // ---------------- Refresh Diff ----------------
+  // ---------------- Preview ----------------
 
-  diff = await getGitDiff();
+  console.log("\n" + chalk.bold("PR Preview"));
 
-  analysis = analyzeDiff(diff.combined);
+  console.log(chalk.dim("─".repeat(40)));
 
-  // ---------------- Review ----------------
+  console.log(`${chalk.yellow("Commit:")} ${message}`);
 
-  let accepted = false;
+  console.log(`${chalk.magenta("Title:")} ${pr.title}`);
 
-  while (!accepted) {
-    console.log(`\n${chalk.bold("PR Preview")}`);
+  console.log(`${chalk.magenta("Body:")}\n${pr.body}`);
 
-    console.log(chalk.dim("─".repeat(40)));
+  const confirm = await inquirer.prompt([
+    {
+      type: "confirm",
 
-    console.log(`${chalk.magenta("Title:")} ${pr.title}`);
+      name: "ship",
 
-    console.log(`${chalk.magenta("Body:")}\n${pr.body}`);
+      message: "Ship this PR?",
 
-    const answer = await inquirer.prompt([
-      {
-        type: "select",
+      default: true,
+    },
+  ]);
 
-        name: "action",
+  if (!confirm.ship) {
+    console.log(chalk.yellow("Cancelled. No git changes made."));
 
-        message: "Continue?",
-
-        choices: [
-          {
-            name: "✔ Ship PR",
-            value: "yes",
-          },
-
-          {
-            name: "Edit title",
-            value: "title",
-          },
-
-          {
-            name: "Edit body",
-            value: "body",
-          },
-
-          {
-            name: "Cancel",
-            value: "cancel",
-          },
-        ],
-      },
-    ]);
-
-    if (answer.action === "cancel") return;
-
-    if (answer.action === "title") {
-      const edit = await inquirer.prompt([
-        {
-          type: "input",
-
-          name: "value",
-
-          message: "Title",
-
-          default: pr.title,
-        },
-      ]);
-
-      pr.title = edit.value;
-    }
-
-    if (answer.action === "body") {
-      const edit = await inquirer.prompt([
-        {
-          type: "editor",
-
-          name: "value",
-
-          message: "Body",
-
-          default: pr.body,
-        },
-      ]);
-
-      pr.body = edit.value;
-    }
-
-    if (answer.action === "yes") accepted = true;
+    return;
   }
+
+  // ---------------- Commit ----------------
+
+  const gitSpinner = ora("Committing changes...").start();
+
+  await stageAll();
+
+  await commit(message);
+
+  gitSpinner.succeed("Changes committed");
 
   // ---------------- Push ----------------
 
@@ -329,7 +268,7 @@ export async function runPRWorkflow() {
 
   pushSpinner.succeed("Code pushed");
 
-  // ---------------- Create PR ----------------
+  // ---------------- PR ----------------
 
   const prSpinner = ora("Creating GitHub PR...").start();
 
