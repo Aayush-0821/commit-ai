@@ -7,3 +7,11 @@ export async function getGitStatus(){
 
     return status;
 }
+
+export async function stashChanges(){
+    await git.stash();
+}
+
+export async function popStash(){
+    await git.stash(["pop"]);
+}
