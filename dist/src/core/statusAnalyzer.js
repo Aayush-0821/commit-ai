@@ -7,7 +7,7 @@ export async function analyzeRepository() {
     }
     const status = await getGitStatus();
     return {
-        branch: status.current ?? "",
+        branch: status.current === "HEAD" ? "HEAD" : status.current ?? "",
         clean: status.isClean(),
         files: {
             staged: status.staged,

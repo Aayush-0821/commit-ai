@@ -95,6 +95,23 @@ export async function runPRWorkflow() {
 
   let finalBranch = status.branch;
 
+  if(status.branch === "HEAD"){
+    console.log(chalk.yellow("\n⚠️ You are currently not on a branch."));
+
+    const fix = await inquirer.prompt([
+        {
+            type:"input",
+            name:"branch",
+            message:"Create/Switch to branch : ",
+            default:"feature/commit-ai",
+        },
+    ]);
+
+    finalBranch = await createBranch(fix.branch);
+
+    console.log(chalk.green(`✔ Switched to ${finalBranch}`));
+  }
+
   const branches = await getBranches();
 
   const branchAnswer = await inquirer.prompt([
@@ -263,6 +280,12 @@ export async function runPRWorkflow() {
   // ---------------- Push ----------------
 
   const pushSpinner = ora("Pushing changes...").start();
+
+  if(finalBranch === "HEAD"){
+    console.log(chalk.red("Cannot Push detached HEAD"));
+
+    return;
+  }
 
   await pushBranch(finalBranch);
 
