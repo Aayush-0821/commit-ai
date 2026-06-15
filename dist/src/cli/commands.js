@@ -230,6 +230,9 @@ Run ${chalk.bold.white("git init")} inside your project root to initialize one.
     //--------------Config Command--------------------
     program
         .command("config")
-        .description("Show Commit-AI Configuration")
-        .action(() => showConfig());
+        .description("Show or Edit Commit-AI Configuration")
+        .option("--edit", "Open Configuration file for Editing")
+        .action((options) => {
+        showConfig(options.edit);
+    });
 }

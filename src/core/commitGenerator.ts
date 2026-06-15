@@ -1,8 +1,16 @@
+import { getConfig } from "../config/configManager.js";
 import { DiffAnalysis } from "./diffTypes.js";
 
 export function generateCommitMessage(
     analysis: DiffAnalysis
 ){
+
+    const config = getConfig();
+
+    if(config?.preferences.commitStyle === "simple"){
+        return generateSimpleMessage(analysis);
+    }
+
     const type = detectType(analysis);
 
     const scope = detectScope(analysis);
@@ -62,4 +70,10 @@ function buildMessage(
     else action = "improve code";
 
     return `${type}(${scope}) : ${action}`;
+}
+
+function generateSimpleMessage(
+    analysis:DiffAnalysis
+){
+    return `Update ${analysis.summary.toLowerCase()}`;
 }

@@ -1,10 +1,16 @@
 import { getOpenAIClient } from "./client.js";
+import { getConfig } from "../config/configManager.js";
 
 export async function generateAICommitMessage(
     diff:string,
     pastCommits:string = ""
 ){
     const openai = getOpenAIClient();
+    const config = getConfig();
+
+    const MAX_CHARS = 12000;
+    const safeDiff = diff.length > MAX_CHARS ? diff.slice(0,MAX_CHARS) + "\n...[TRUNCATED TO PREVENT API LIMITS]":diff;
+    
     const response = await openai.chat.completions.create({
        model:"openrouter/free",
         messages:[
