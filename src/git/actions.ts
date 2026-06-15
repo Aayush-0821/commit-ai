@@ -17,7 +17,6 @@ export async function pushBranch(
 ){
     await git.push(
         "origin",
-        branch,
-        ["-u"]
+        branch
     );
 }

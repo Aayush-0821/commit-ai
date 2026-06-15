@@ -165,9 +165,16 @@ export async function runPRWorkflow() {
   }
 
   // Create branch
-  const finalBranch = await createBranch(finalBranchName);
+  let finalBranch = branch;
 
-  console.log(chalk.green(`✔ Switched to new branch: ${finalBranch}\n`));
+  if(!finalBranch){
+    finalBranch = await createBranch(finalBranchName);
+
+    console.log(chalk.green(`✔ Switched to new branch: ${finalBranch}\n`));
+  }
+  else{
+    console.log(chalk.green(`✔ Using existing branch: ${finalBranch}\n`));
+  }
 
   // 5. Interactive Review Loop
   let isAccepted = false;
