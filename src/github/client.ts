@@ -1,8 +1,14 @@
 import { Octokit } from "octokit";
 import { getConfig } from "../config/configManager.js";
 
-const config = getConfig();
+export function getGithubClient() {
+  const config = getConfig();
 
-export const github = new Octokit({
-    auth:config?.githubToken
-});
+  if (!config) {
+    throw new Error("Commit-AI not configured");
+  }
+
+  return new Octokit({
+    auth: config.githubToken,
+  });
+}

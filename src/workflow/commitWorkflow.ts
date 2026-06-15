@@ -135,17 +135,6 @@ export async function runCommitWorkflow() {
     return;
   }
 
-  if(
-config.preferences.autoPush
-){
-
-await pushBranch(status.branch);
-
-return;
-
-}
-
-
   const pushAnswer = await inquirer.prompt([
     {
       type: "confirm",

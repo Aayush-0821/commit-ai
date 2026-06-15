@@ -1,4 +1,4 @@
-import { github } from "./client.js";
+import { getGithubClient } from "./client.js";
 
 export async function createPullRequest(
     owner:string,
@@ -7,6 +7,8 @@ export async function createPullRequest(
     body:string,
     branch:string,
 ){
+    const github = getGithubClient();
+
     const response = await github.rest.pulls.create({
         owner,
         repo,

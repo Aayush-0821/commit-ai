@@ -18,11 +18,13 @@ program.action(() => {
     const subtitle = chalk.magentaBright("  AI powered Git workflow Assistant \n");
     const commandsHeader = chalk.bold.white("  Commands:\n");
     const commandsList = `
-    ${chalk.green("commit-ai status")}    ${chalk.dim("Show current branch status")}
-    ${chalk.green("commit-ai diff")}      ${chalk.dim("Analyze uncommitted changes")}
-    ${chalk.green("commit-ai generate")}  ${chalk.dim("Generate a smart commit message")}
-    ${chalk.green("commit-ai commit")}    ${chalk.dim("Run the full auto-commit flow")}
-    ${chalk.green("commit-ai pr")}        ${chalk.dim("Create an automated Pull Request")}
+    ${chalk.green("commit-ai init")}            ${chalk.dim("Configure Commit-AI")}
+    ${chalk.green("commit-ai config")}          ${chalk.dim("Show/Edit Configuration")}
+    ${chalk.green("commit-ai status")}          ${chalk.dim("Show current branch status")}
+    ${chalk.green("commit-ai diff")}            ${chalk.dim("Analyze uncommitted changes")}
+    ${chalk.green("commit-ai generate")}        ${chalk.dim("Generate a smart commit message")}
+    ${chalk.green("commit-ai commit")}          ${chalk.dim("Run the full auto-commit flow")}
+    ${chalk.green("commit-ai pr")}              ${chalk.dim("Create an automated Pull Request")}
   `;
     console.log(logo);
     console.log(subtitle);
