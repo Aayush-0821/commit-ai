@@ -1,14 +1,37 @@
 {
-  "name": "commit-ai",
+  "name": "@aayush0821/commit-ai",
   "version": "1.0.0",
-  "description": "",
-  "license": "ISC",
-  "author": "Author",
+  "description": "AI powered Git workflow assistant that generates commits and creates PRs",
+  "license": "MIT",
+  "author": "Aayush Vats",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "commit-ai": "./dist/bin/index.js"
+    "commit-ai": "dist/bin/index.js"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "git",
+    "github",
+    "ai",
+    "cli",
+    "developer-tools",
+    "commit",
+    "pull-request",
+    "automation"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Aayush-0821/commit-ai.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Aayush-0821/commit-ai/issues"
+  },
+  "homepage": "https://github.com/Aayush-0821/commit-ai#readme",
   "scripts": {
     "dev": "tsx bin/index.ts",
     "build": "tsc",
