@@ -1,13 +1,14 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import { registerCommands } from "./commands.js";
+import packageJson from "../../package.json" with {type:"json"};
 
 const program = new Command();
 
 program
   .name("commit-ai")
   .description("AI powered Git workflow assistant")
-  .version("1.0.0");
+  .version(packageJson.version,"-v, --version","Display installed version");
 
 registerCommands(program);
 
