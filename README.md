@@ -2,7 +2,8 @@
 
 > AI-powered Git workflow assistant that generates intelligent commit messages, manages branches, pushes changes, and creates GitHub Pull Requests — all from your terminal.
 
-![alt text](image.png)
+<img width="857" height="647" alt="image" src="https://github.com/user-attachments/assets/74a2e9a4-2bc3-4067-9643-9ef892d9a4e2" />
+
 
 ##  Overview
 
